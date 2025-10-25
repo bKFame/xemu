@@ -13,6 +13,7 @@ on:
       - '!.github/workflows/build.yml'
       - 'README.md'
       - 'ubuntu-win64-cross/**'
+  workflow_dispatch:
 
 jobs:
   Init:
@@ -389,7 +390,6 @@ jobs:
         path: xemu-macos-universal-${{ matrix.configuration }}.zip
 
   Release:
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
     needs: [Ubuntu, macOSUniversal, Windows, WindowsPdb]
     steps:
@@ -439,47 +439,3 @@ jobs:
           dist/xemu-ubuntu-x86_64-release/xemu/xemu-v${{ env.XEMU_VERSION }}-x86_64.AppImage
           dist/xemu-ubuntu-aarch64-debug/xemu/xemu-v${{ env.XEMU_VERSION }}-dbg-aarch64.AppImage
           dist/xemu-ubuntu-aarch64-release/xemu/xemu-v${{ env.XEMU_VERSION }}-aarch64.AppImage
-    - name: Trigger website update
-      uses: benc-uk/workflow-dispatch@v1.2.2
-      with:
-        workflow: build.yml
-        repo: xemu-project/xemu-website
-        token: ${{ secrets.XEMU_ROBOT_TOKEN }}
-        ref: master
-
-  # Sync archive version of source (including submodule code) to the
-  # ppa-snapshot branch to work around limitations of the Launchpad platform,
-  # namely: no network egress on package build, no custom scripting in source
-  # package creation.
-  PushToPPA:
-    name: Push to PPA Snapshot Branch
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
-    needs: [Ubuntu, macOSUniversal, Windows, WindowsPdb]
-    runs-on: ubuntu-latest
-    steps:
-    - name: Download source package
-      uses: actions/download-artifact@v4
-      with:
-        name: src.tar.gz
-    - name: Extract source package
-      run: |
-        mkdir src
-        tar -C src -xf src.tar.gz
-
-        # Ensure subprojects are uploaded
-        rm src/subprojects/.gitignore
-    - name: Integrate Debian packaging
-      run: |
-        pushd src
-        echo -e "\
-        xemu (1:$(cat XEMU_VERSION)-0) unstable; urgency=medium\n\
-          Built from $(cat XEMU_VERSION)\n\
-         -- Matt Borgerson <contact@mborgerson.com>  $(date -R)" > debian/changelog
-        popd
-    - name: Deploy source archive to branch
-      uses: peaceiris/actions-gh-pages@v3
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: ./src
-        publish_branch: ppa-snapshot
-        force_orphan: true
